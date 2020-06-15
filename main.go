@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -22,15 +23,24 @@ func main() {
 
 	defer resp.Body.Close()
 
+	if resp.StatusCode/100 != 2 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		log.Fatal(fmt.Errorf("(%d) %s", resp.StatusCode, body))
+	}
+
 	var r ranges
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		log.Fatal(err)
 	}
 
 	for _, prefix := range append(r.Prefixes, r.IPv6Prefixes...) {
-		_, cidr, err := net.ParseCIDR(prefix.IPPrefix)
+		addr := prefix.IPPrefix
+		if addr == "" {
+			addr = prefix.IPv6Prefix
+		}
+		_, cidr, err := net.ParseCIDR(addr)
 		if err != nil {
-			log.Printf("error parsing CIDR (%s): %s", prefix.IPPrefix, err)
+			log.Printf("error parsing CIDR (%s): %s", addr, err)
 			continue
 		}
 
@@ -51,7 +61,7 @@ type ranges struct {
 
 type prefix struct {
 	IPPrefix           string `json:"ip_prefix,omitempty"`
-	Ipv6Prefix         string `json:"ipv6_prefix,omitempty"`
+	IPv6Prefix         string `json:"ipv6_prefix,omitempty"`
 	Region             string `json:"region"`
 	NetworkBorderGroup string `json:"network_border_group"`
 	Service            string `json:"service"`
@@ -65,8 +75,8 @@ func (p prefix) String() string {
 		b.WriteString(p.IPPrefix)
 	}
 
-	if p.Ipv6Prefix != "" {
-		b.WriteString(p.Ipv6Prefix)
+	if p.IPv6Prefix != "" {
+		b.WriteString(p.IPv6Prefix)
 	}
 
 	b.WriteString("\nRegion:  ")
